@@ -6,6 +6,8 @@ A high-performance computer vision pipeline using state-of-the-art YOLOv12. Cove
 ![YOLOv12](https://img.shields.io/badge/Framework-YOLOv12-green)
 ![OpenCV](https://img.shields.io/badge/CV-OpenCV-orange)
 
+<img src="https://github.com/user-attachments/assets/a1f83abc-e5fc-4ccf-a283-03e460873e9b" width="700"/>
+
 ---
 
 ## 🚀 Key Features
