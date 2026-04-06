@@ -1,19 +1,20 @@
 import cv2
-from ultralytics import YOLO
 import math
 import time
+from ultralytics import YOLO
 
-#Read the Image/Video/Live WebcamFeed using OpenCV
-cap = cv2.VideoCapture(r"Videos/riding_bicycle.mp4")
-#cap = cv2.VideoCapture(0)
-#Get Video Properties
-frame_width = int(cap.get(3))
-frame_height = int(cap.get(4))
-fps = int(cap.get(cv2.CAP_PROP_FPS))
-output_video = cv2.VideoWriter('output.mp4', cv2.VideoWriter_fourcc(*'mp4v'), fps, (frame_width, frame_height))
-#Load the YOLOv12 Model
+video_path = "Videos/riding_bicycle.mp4"
+cap = cv2.VideoCapture(video_path)
+
+frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+original_fps = int(cap.get(cv2.CAP_PROP_FPS))
+
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+output_video = cv2.VideoWriter('output_video.mp4', fourcc, original_fps, (frame_width, frame_height))
+
 model = YOLO("yolo12n.pt")
-#Classes in the MS COCO Dataset
+
 cocoClassNames = ["person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck", "boat",
                   "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog",
                   "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella",
@@ -24,40 +25,47 @@ cocoClassNames = ["person", "bicycle", "car", "motorbike", "aeroplane", "bus", "
                   "diningtable", "toilet", "tvmonitor", "laptop", "mouse", "remote", "keyboard", "cell phone",
                   "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors",
                   "teddy bear", "hair drier", "toothbrush"]
-ctime = 0
-ptime = 0
-count = 0
-while True:
+
+prev_time = 0
+frame_count = 0
+
+while cap.isOpened():
     ret, frame = cap.read()
-    if ret:
-        count += 1
-        print(f"Frame Number: {count}")
-        #Object Detection using YOLOv12
-        results = model.predict(frame, conf=0.15, iou = 0.1)
-        for result in results:
-            boxes = result.boxes
-            for box in boxes:
-                x1, y1, x2, y2 = box.xyxy[0]
-                x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-                cv2.rectangle(frame, (x1, y1), (x2, y2), [255,0,0], 2)
-                classNameInt = int(box.cls[0])
-                className = cocoClassNames[classNameInt]
-                conf = math.ceil(box.conf[0] * 100)/100
-                label = className + ":" + str(conf)
-                text_size = cv2.getTextSize(label, 0, fontScale=0.5, thickness=2)[0]
-                c2 = x1 + text_size[0], y1 - text_size[1] - 3
-                cv2.rectangle(frame, (x1, y1), c2, [255, 0, 0], -1)
-                cv2.putText(frame, label, (x1, y1 -  2), 0, 0.5, [255,255,255], thickness=1, lineType = cv2.LINE_AA)
-        #Display the Video using OpenCV
-        ctime = time.time()
-        fps = 1/(ctime - ptime)
-        ptime = ctime
-        cv2.putText(frame, "FPS" + ":" + str(int(fps)), (30, 70), cv2.FONT_HERSHEY_PLAIN, 3, (255, 0, 255), 3)
-        output_video.write(frame)
-        cv2.imshow("Video", frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-    else:
+    if not ret:
         break
+
+    frame_count += 1
+    
+    results = model.predict(frame, conf=0.15, iou=0.1, verbose=False)
+
+    for result in results:
+        boxes = result.boxes
+        for box in boxes:
+            x1, y1, x2, y2 = map(int, box.xyxy[0])
+            class_id = int(box.cls[0])
+            conf = math.ceil(box.conf[0] * 100) / 100
+            
+            label = f"{cocoClassNames[class_id]}: {conf}"
+
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
+            (text_w, text_h), _ = cv2.getTextSize(label, 0, 0.5, 2)
+            cv2.rectangle(frame, (x1, y1), (x1 + text_w, y1 - text_h - 5), (255, 0, 0), -1)
+            cv2.putText(frame, label, (x1, y1 - 5), 0, 0.5, (255, 255, 255), 1, lineType=cv2.LINE_AA)
+
+    curr_time = time.time()
+    fps = 1 / (curr_time - prev_time) if (curr_time - prev_time) > 0 else 0
+    prev_time = curr_time
+
+    cv2.putText(frame, f"FPS: {int(fps)}", (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 2)
+
+    output_video.write(frame)
+    cv2.imshow("YOLOv12 Real-Time Detection", frame)
+
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+
 cap.release()
+output_video.release()
 cv2.destroyAllWindows()
+print(f"Total square: {frame_count}")
