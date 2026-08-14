@@ -1,5 +1,4 @@
 import cv2
-import math
 import time
 from ultralytics import YOLO
 
@@ -14,6 +13,8 @@ output_video = cv2.VideoWriter('privacy_output.mp4', cv2.VideoWriter_fourcc(*'mp
 
 model = YOLO("yolo12n.pt")
 
+BLUR_CLASSES = [0]
+
 cocoClassNames = ["person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck", "boat",
                   "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog",
                   "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella",
@@ -25,6 +26,9 @@ cocoClassNames = ["person", "bicycle", "car", "motorbike", "aeroplane", "bus", "
                   "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors",
                   "teddy bear", "hair drier", "toothbrush"]
 
+FONT = cv2.FONT_HERSHEY_SIMPLEX
+FONT_SCALE = 0.5
+FONT_THICKNESS = 1
 
 blur_ratio = 50
 prev_time = 0
@@ -35,32 +39,36 @@ while cap.isOpened():
     if not ret:
         break
 
+    results = model.predict(frame, conf=0.25, iou=0.7, classes=BLUR_CLASSES, verbose=False)
 
-    results = model.predict(frame, conf=0.15, iou=0.1, verbose=False)
-
+    detections = []
     for result in results:
-        boxes = result.boxes
-        for box in boxes:
-       
+        for box in result.boxes:
             x1, y1, x2, y2 = map(int, box.xyxy[0])
-            
-            roi = frame[y1:y2, x1:x2]
-      
-            if roi.shape[0] > 0 and roi.shape[1] > 0:
-                blurred_roi = cv2.blur(roi, (blur_ratio, blur_ratio))
-                frame[y1:y2, x1:x2] = blurred_roi
+            x1, y1 = max(0, x1), max(0, y1)
+            x2, y2 = min(frame.shape[1], x2), min(frame.shape[0], y2)
+            if x2 > x1 and y2 > y1:
+                detections.append((x1, y1, x2, y2, int(box.cls[0]), float(box.conf[0])))
 
+    for x1, y1, x2, y2, _, _ in detections:
+        frame[y1:y2, x1:x2] = cv2.blur(frame[y1:y2, x1:x2], (blur_ratio, blur_ratio))
 
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
-            
-            class_id = int(box.cls[0])
-            conf = math.ceil(box.conf[0] * 100) / 100
-            label = f"{cocoClassNames[class_id]}: {conf}"
-            
-            (tw, th), _ = cv2.getTextSize(label, 0, 0.5, 2)
-            cv2.rectangle(frame, (x1, y1), (x1 + tw, y1 - th - 5), (255, 0, 0), -1)
-            cv2.putText(frame, label, (x1, y1 - 5), 0, 0.5, (255, 255, 255), 1, lineType=cv2.LINE_AA)
+    for x1, y1, x2, y2, class_id, raw_conf in detections:
+        conf = round(raw_conf, 2)
+        label = f"{cocoClassNames[class_id]}: {conf}"
 
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
+
+        (tw, th), baseline = cv2.getTextSize(label, FONT, FONT_SCALE, FONT_THICKNESS)
+
+        if y1 - th - baseline >= 0:
+            label_y = y1
+        else:
+            label_y = y2 + th + baseline
+
+        cv2.rectangle(frame, (x1, label_y - th - baseline), (x1 + tw, label_y), (255, 0, 0), -1)
+        cv2.putText(frame, label, (x1, label_y - baseline), FONT, FONT_SCALE, (255, 255, 255),
+                    FONT_THICKNESS, cv2.LINE_AA)
 
     curr_time = time.time()
     fps = 1 / (curr_time - prev_time) if (curr_time - prev_time) > 0 else 0
